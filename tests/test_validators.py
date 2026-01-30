@@ -83,3 +83,46 @@ def test_validate_dependencies():
 
     assert 'pandas' in report['available']
     assert 'numpy' in report['available']
+
+
+from src.validators.security import SecurityScanner
+
+
+def test_detect_aws_credentials():
+    """Test detecting AWS access keys."""
+    code = "AWS_ACCESS_KEY = 'AKIAIOSFODNN7EXAMPLE'"
+
+    scanner = SecurityScanner()
+    secrets = scanner.detect_secrets(code)
+
+    assert len(secrets) == 1
+    assert secrets[0]['type'] == 'aws_access_key'
+
+
+def test_detect_hardcoded_paths():
+    """Test detecting hardcoded absolute paths."""
+    code = """
+model_path = '/Users/datascientist/models/my_model.pkl'
+data_path = '/home/user/data.csv'
+"""
+
+    scanner = SecurityScanner()
+    paths = scanner.detect_hardcoded_paths(code)
+
+    assert len(paths) == 2
+    assert any('/Users/' in p['value'] for p in paths)
+    assert any('/home/' in p['value'] for p in paths)
+
+
+def test_full_security_scan():
+    """Test full security scan of notebook."""
+    notebook_path = Path("tests/fixtures/secrets_notebook.ipynb")
+
+    from src.analyzer import NotebookAnalyzer
+    analyzer = NotebookAnalyzer(notebook_path)
+
+    scanner = SecurityScanner()
+    report = scanner.analyze(analyzer)
+
+    assert len(report['secrets']) > 0
+    assert len(report['hardcoded_paths']) > 0
