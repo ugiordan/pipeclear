@@ -35,3 +35,28 @@ def test_extract_imports():
     assert 'pandas' in imports
     assert 'numpy' in imports
     assert len(imports) == 2
+
+
+def test_build_dependency_graph():
+    """Test building variable dependency graph between cells."""
+    notebook_path = Path("tests/fixtures/simple_notebook.ipynb")
+    analyzer = NotebookAnalyzer(notebook_path)
+
+    graph = analyzer.build_dependency_graph()
+
+    # Cell 1 defines df, Cell 2 uses df
+    assert 1 in graph[2]['depends_on']
+    # Cell 0 has no dependencies
+    assert len(graph[0]['depends_on']) == 0
+
+
+def test_identify_defined_variables():
+    """Test identifying variables defined in a code cell."""
+    code = "df = pd.read_csv('data.csv')\nx = 5"
+
+    from src.analyzer import extract_defined_vars
+
+    defined = extract_defined_vars(code)
+
+    assert 'df' in defined
+    assert 'x' in defined
