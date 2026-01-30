@@ -1,6 +1,7 @@
 """Notebook analysis and parsing module."""
+import ast
 from pathlib import Path
-from typing import List
+from typing import List, Set
 import nbformat
 from nbformat.notebooknode import NotebookNode
 
@@ -54,3 +55,30 @@ class NotebookAnalyzer:
             for cell in self.cells
             if cell['type'] == 'code'
         ]
+
+    def extract_imports(self) -> Set[str]:
+        """Extract all imported packages from notebook code.
+
+        Returns:
+            Set of package names imported in the notebook
+        """
+        imports = set()
+
+        for code in self.get_code_cells():
+            try:
+                tree = ast.parse(code)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            # Get base package name (e.g., 'pandas' from 'pandas.core')
+                            package = alias.name.split('.')[0]
+                            imports.add(package)
+                    elif isinstance(node, ast.ImportFrom):
+                        if node.module:
+                            package = node.module.split('.')[0]
+                            imports.add(package)
+            except SyntaxError:
+                # Skip cells with invalid syntax
+                continue
+
+        return imports
