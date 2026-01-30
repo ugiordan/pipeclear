@@ -39,8 +39,40 @@ class IssueReporter:
                     'severity': 'critical',
                     'category': 'resource',
                     'message': f"Estimated VRAM requirement ({required_vram}GB) exceeds "
-                               f"largest available GPU ({max_gpu_memory}GB). "
-                               f"Model parallelism or quantization needed."
+                               f"largest available GPU ({max_gpu_memory}GB).",
+                    'suggestion': f"💡 Fix: Use model.load_in_8bit=True (reduces to ~{required_vram/2:.0f}GB) "
+                                 f"or device_map='auto' for model parallelism",
+                    'time_impact': "Would fail after model loading (~5-10 minutes)"
+                })
+        else:
+            # Show warnings for large models even without cluster info
+            if required_vram > 80:  # Larger than A100
+                issues.append({
+                    'severity': 'critical',
+                    'category': 'resource',
+                    'message': f"Large model detected: {required_vram}GB VRAM estimated. "
+                               f"Exceeds most single GPUs (A100 = 80GB).",
+                    'suggestion': f"💡 Fix: Use 8-bit quantization (model.load_in_8bit=True) "
+                                 f"or multi-GPU with device_map='auto'",
+                    'time_impact': "Would likely fail with OOM error after 5-10 minutes"
+                })
+            elif required_vram > 40:  # Larger than A6000
+                issues.append({
+                    'severity': 'warning',
+                    'category': 'resource',
+                    'message': f"Medium-large model: {required_vram}GB VRAM estimated. "
+                               f"Requires A100 (80GB) or larger GPU.",
+                    'suggestion': f"💡 Tip: Ensure cluster has A100 GPUs available, or use quantization",
+                    'time_impact': "May fail on smaller GPUs (V100/A6000)"
+                })
+            elif required_vram > 16:  # Show info for medium models
+                issues.append({
+                    'severity': 'warning',
+                    'category': 'resource',
+                    'message': f"GPU required: {required_vram}GB VRAM estimated. "
+                               f"Ensure appropriate GPU is allocated.",
+                    'suggestion': f"💡 Tip: A6000 (48GB) or A100 (80GB) recommended",
+                    'time_impact': "May fail on smaller GPUs (T4/V100)"
                 })
 
         return issues
@@ -61,8 +93,10 @@ class IssueReporter:
                 'severity': 'warning',
                 'category': 'dependency',
                 'message': f"Local/unavailable packages detected: "
-                           f"{', '.join(report['unavailable'])}. "
-                           f"Must be packaged with pipeline or made available."
+                           f"{', '.join(report['unavailable'])}.",
+                'suggestion': f"💡 Fix: Package custom libraries in container image "
+                             f"or make available via PVC/git clone",
+                'time_impact': "Would fail at import time (first few seconds of pipeline run)"
             })
 
         return issues
@@ -79,19 +113,23 @@ class IssueReporter:
         issues = []
 
         for secret in report['secrets']:
+            secret_type = secret['type'].replace('_', ' ').title()
             issues.append({
                 'severity': 'critical',
                 'category': 'security',
-                'message': f"Line {secret['line']}: Hardcoded {secret['type']} detected. "
-                           f"Use environment variables or OpenShift Secrets."
+                'message': f"Line {secret['line']}: Hardcoded {secret_type} detected.",
+                'suggestion': f"💡 Fix: Use os.getenv('{secret_type.upper().replace(' ', '_')}') "
+                             f"and store in OpenShift Secret",
+                'time_impact': "Security risk - credentials exposed in pipeline code/logs"
             })
 
         for path in report['hardcoded_paths']:
             issues.append({
                 'severity': 'warning',
                 'category': 'portability',
-                'message': f"Line {path['line']}: Hardcoded absolute path '{path['value']}'. "
-                           f"Parameterize or use PVC mount."
+                'message': f"Line {path['line']}: Hardcoded absolute path '{path['value']}'.",
+                'suggestion': f"💡 Fix: Use parameter or PVC mount (path would not exist in container)",
+                'time_impact': "Would fail when path doesn't exist (~seconds into execution)"
             })
 
         return issues
@@ -133,8 +171,54 @@ class IssueReporter:
             'total': len(all_issues),
         }
 
+        # Estimate time saved
+        time_saved_minutes = self._estimate_time_saved(all_issues)
+        summary['time_saved_minutes'] = time_saved_minutes
+        summary['time_saved_human'] = self._format_time_saved(time_saved_minutes)
+
         return {
             'timestamp': datetime.now().isoformat(),
             'summary': summary,
             'issues': all_issues,
         }
+
+    def _estimate_time_saved(self, issues: List[Dict]) -> int:
+        """Estimate time saved by catching issues early.
+
+        Args:
+            issues: List of detected issues
+
+        Returns:
+            Estimated minutes saved
+        """
+        time_saved = 0
+        for issue in issues:
+            # Estimate based on severity and type
+            if issue['severity'] == 'critical':
+                if 'resource' in issue['category']:
+                    time_saved += 30  # OOM failures happen after loading/training
+                elif 'security' in issue['category']:
+                    time_saved += 60  # Security issues take longer to debug
+                else:
+                    time_saved += 15
+            elif issue['severity'] == 'warning':
+                time_saved += 5  # Warnings still save debugging time
+
+        return max(time_saved, 3)  # At minimum, 3 minutes saved from validation
+
+    def _format_time_saved(self, minutes: int) -> str:
+        """Format time saved in human-readable form.
+
+        Args:
+            minutes: Minutes saved
+
+        Returns:
+            Human-readable time string
+        """
+        if minutes >= 60:
+            hours = minutes // 60
+            mins = minutes % 60
+            if mins > 0:
+                return f"{hours}h {mins}min"
+            return f"{hours}h"
+        return f"{minutes}min"
