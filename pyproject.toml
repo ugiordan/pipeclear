@@ -1,0 +1,42 @@
+[project]
+name = "rhoai-pipeline-preflight"
+version = "0.1.0"
+description = "Automated notebook-to-pipeline converter with pre-flight validation for RHOAI"
+authors = [{name = "Ugo Giordano"}]
+requires-python = ">=3.11"
+dependencies = [
+    "nbformat>=5.9.0",
+    "astroid>=3.0.0",
+    "anthropic>=0.40.0",
+    "kfp>=2.0.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+rhoai-preflight = "src.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
