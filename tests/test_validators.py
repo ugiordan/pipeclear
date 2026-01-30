@@ -37,3 +37,49 @@ def test_full_notebook_resource_estimation():
 
     assert report['gpu_required'] is True
     assert report['estimated_vram_gb'] > 0
+
+
+from src.validators.dependency import DependencyValidator
+
+
+def test_extract_package_imports():
+    """Test extracting package imports from code."""
+    code = """
+import pandas as pd
+import torch
+from sklearn.ensemble import RandomForest
+import custom_local_module
+"""
+
+    validator = DependencyValidator()
+    packages = validator.extract_imports(code)
+
+    assert 'pandas' in packages
+    assert 'torch' in packages
+    assert 'sklearn' in packages
+
+
+def test_check_pypi_availability():
+    """Test checking if package is available on PyPI."""
+    validator = DependencyValidator()
+
+    # Well-known packages
+    assert validator.is_on_pypi('pandas') is True
+    assert validator.is_on_pypi('numpy') is True
+
+    # Unlikely to exist
+    assert validator.is_on_pypi('this-package-definitely-does-not-exist-xyz123') is False
+
+
+def test_validate_dependencies():
+    """Test full dependency validation."""
+    notebook_path = Path("tests/fixtures/simple_notebook.ipynb")
+
+    from src.analyzer import NotebookAnalyzer
+    analyzer = NotebookAnalyzer(notebook_path)
+
+    validator = DependencyValidator()
+    report = validator.analyze(analyzer)
+
+    assert 'pandas' in report['available']
+    assert 'numpy' in report['available']
