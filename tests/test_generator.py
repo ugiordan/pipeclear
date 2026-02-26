@@ -72,3 +72,14 @@ def test_sanitize_pipeline_name_normal():
         packages=[]
     )
     assert 'def valid_name' in component_code
+
+
+def test_default_base_image_is_publicly_accessible():
+    """Test that the default base image uses a public registry."""
+    generator = PipelineGenerator()
+    component_code = generator.generate_component(
+        name="test_component",
+        code_cells=["print('hello')"],
+    )
+    assert 'quay.io/modh' not in component_code
+    assert 'registry.access.redhat.com' in component_code

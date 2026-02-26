@@ -20,7 +20,7 @@ class PipelineGenerator:
         name: str,
         code_cells: List[str],
         packages: Optional[List[str]] = None,
-        base_image: str = "quay.io/modh/runtime-images:ubi9-python-3.11"
+        base_image: str = "registry.access.redhat.com/ubi9/python-311:latest"
     ) -> str:
         """Generate KFP component from code cells.
 
