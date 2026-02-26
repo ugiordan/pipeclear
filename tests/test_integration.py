@@ -198,3 +198,21 @@ def test_image_validator_integrated():
     report = reporter.generate_report(all_reports)
     assert report['summary']['critical'] == 1
     assert any(i['category'] == 'image' for i in report['issues'])
+
+
+def test_json_output_format():
+    """Test that report can be serialized to JSON."""
+    from src.reporter import IssueReporter
+    reporter = IssueReporter()
+
+    all_reports = {
+        'resource': {'gpu_required': False, 'estimated_vram_gb': 0, 'models': []},
+        'dependency': {'available': ['pandas'], 'unavailable': ['custom_lib'], 'unknown': []},
+        'security': {'secrets': [], 'hardcoded_paths': []},
+    }
+
+    report = reporter.generate_report(all_reports)
+    json_str = json.dumps(report, indent=2)
+    parsed = json.loads(json_str)
+    assert parsed['summary']['total'] == 1
+    assert parsed['summary']['warning'] == 1

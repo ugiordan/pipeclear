@@ -22,6 +22,7 @@ def analyze(
     notebook_path: Path = typer.Argument(..., help="Path to Jupyter notebook"),
     output: Path = typer.Option(None, "--output", "-o", help="Output path for generated pipeline"),
     show_comparison: bool = typer.Option(False, "--compare", help="Show before/after time comparison"),
+    output_format: str = typer.Option("text", "--format", "-f", help="Output format: text, json"),
 ):
     """Analyze notebook and generate pre-flight report."""
 
@@ -83,6 +84,13 @@ def analyze(
         'security': security_report,
         'image': image_issues,
     })
+
+    if output_format == "json":
+        import json
+        console.print(json.dumps(report, indent=2))
+        if report['summary']['critical'] > 0:
+            raise typer.Exit(code=1)
+        return
 
     # Display summary
     console.print("\n[bold]Pre-Flight Analysis Summary[/bold]\n")
