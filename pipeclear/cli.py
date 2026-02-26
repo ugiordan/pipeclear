@@ -13,7 +13,7 @@ from pipeclear.reporter import IssueReporter
 from pipeclear.generator import PipelineGenerator
 
 
-app = typer.Typer(help="RHOAI Pipeline Preflight - Notebook-to-Pipeline Converter")
+app = typer.Typer(help="PipeClear - Clear your notebooks for takeoff")
 console = Console()
 
 
@@ -163,7 +163,8 @@ def analyze(
 @app.command()
 def version():
     """Show version information."""
-    console.print("[bold]RHOAI Pipeline Preflight[/bold] v0.1.0")
+    console.print("[bold]PipeClear[/bold] v0.2.0")
+    console.print("Clear your notebooks for takeoff.")
 
 
 if __name__ == "__main__":
