@@ -23,6 +23,11 @@ def analyze(
     output: Path = typer.Option(None, "--output", "-o", help="Output path for generated pipeline"),
     show_comparison: bool = typer.Option(False, "--compare", help="Show before/after time comparison"),
     output_format: str = typer.Option("text", "--format", "-f", help="Output format: text, json"),
+    base_image: str = typer.Option(
+        "registry.access.redhat.com/ubi9/python-311:latest",
+        "--base-image",
+        help="Base container image for pipeline components"
+    ),
 ):
     """Analyze notebook and generate pre-flight report."""
 
@@ -72,7 +77,6 @@ def analyze(
 
         progress.update(task, description="🐳 Checking base image accessibility...")
         image_validator = ImageValidator()
-        base_image = "registry.access.redhat.com/ubi9/python-311:latest"
         image_issues = image_validator.validate_image(base_image)
         progress.advance(task)
 
@@ -143,7 +147,8 @@ def analyze(
         generator = PipelineGenerator()
         pipeline_code = generator.generate_pipeline(
             analyzer=analyzer,
-            pipeline_name=notebook_path.stem
+            pipeline_name=notebook_path.stem,
+            base_image=base_image
         )
 
         output.write_text(pipeline_code)

@@ -57,7 +57,8 @@ def {safe_name}():
     def generate_pipeline(
         self,
         analyzer,
-        pipeline_name: str = "notebook_pipeline"
+        pipeline_name: str = "notebook_pipeline",
+        base_image: str = "registry.access.redhat.com/ubi9/python-311:latest"
     ) -> str:
         """Generate complete KFP pipeline from notebook.
 
@@ -79,7 +80,8 @@ def {safe_name}():
         component_code = self.generate_component(
             name="notebook_component",
             code_cells=code_cells,
-            packages=packages
+            packages=packages,
+            base_image=base_image
         )
 
         # Generate pipeline definition

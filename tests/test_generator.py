@@ -83,3 +83,14 @@ def test_default_base_image_is_publicly_accessible():
     )
     assert 'quay.io/modh' not in component_code
     assert 'registry.access.redhat.com' in component_code
+
+
+def test_custom_base_image():
+    """Test generating component with custom base image."""
+    generator = PipelineGenerator()
+    component_code = generator.generate_component(
+        name="test_component",
+        code_cells=["print('hello')"],
+        base_image="quay.io/myorg/custom-image:v1.0"
+    )
+    assert 'quay.io/myorg/custom-image:v1.0' in component_code
