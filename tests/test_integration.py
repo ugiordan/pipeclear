@@ -178,3 +178,23 @@ def test_fix_suggestions_present():
         if issue['severity'] == 'critical':
             assert 'suggestion' in issue, f"Critical issue missing suggestion: {issue['message']}"
             assert issue['suggestion'].startswith('💡'), "Suggestion should start with lightbulb"
+
+
+def test_image_validator_integrated():
+    """Test that image validation is integrated into the full report."""
+    from src.reporter import IssueReporter
+    reporter = IssueReporter()
+
+    all_reports = {
+        'resource': {'gpu_required': False, 'estimated_vram_gb': 0, 'models': []},
+        'dependency': {'available': ['pandas'], 'unavailable': [], 'unknown': []},
+        'security': {'secrets': [], 'hardcoded_paths': []},
+        'image': [{'severity': 'critical', 'category': 'image',
+                   'message': 'Base image not accessible: fake-image:latest',
+                   'suggestion': 'Fix: Use accessible image',
+                   'time_impact': 'Would fail with ImagePullBackOff'}],
+    }
+
+    report = reporter.generate_report(all_reports)
+    assert report['summary']['critical'] == 1
+    assert any(i['category'] == 'image' for i in report['issues'])

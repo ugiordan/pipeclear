@@ -8,6 +8,7 @@ from src.analyzer import NotebookAnalyzer
 from src.validators.resource import ResourceEstimator
 from src.validators.dependency import DependencyValidator
 from src.validators.security import SecurityScanner
+from src.validators.image import ImageValidator
 from src.reporter import IssueReporter
 from src.generator import PipelineGenerator
 
@@ -51,7 +52,7 @@ def analyze(
         console=console,
         transient=True
     ) as progress:
-        task = progress.add_task("Running pre-flight validators...", total=3)
+        task = progress.add_task("Running pre-flight validators...", total=4)
 
         progress.update(task, description="🔍 Scanning for security issues...")
         security_scanner = SecurityScanner()
@@ -68,12 +69,19 @@ def analyze(
         dependency_report = dependency_validator.analyze(analyzer)
         progress.advance(task)
 
+        progress.update(task, description="🐳 Checking base image accessibility...")
+        image_validator = ImageValidator()
+        base_image = "registry.access.redhat.com/ubi9/python-311:latest"
+        image_issues = image_validator.validate_image(base_image)
+        progress.advance(task)
+
     # Generate report
     reporter = IssueReporter()
     report = reporter.generate_report({
         'resource': resource_report,
         'dependency': dependency_report,
         'security': security_report,
+        'image': image_issues,
     })
 
     # Display summary

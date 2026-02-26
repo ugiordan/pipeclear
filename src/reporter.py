@@ -164,6 +164,10 @@ class IssueReporter:
             self.format_security_issues(all_reports['security'])
         )
 
+        # Add image validation issues (passed through directly)
+        if 'image' in all_reports:
+            all_issues.extend(all_reports['image'])
+
         # Count by severity
         summary = {
             'critical': sum(1 for i in all_issues if i['severity'] == 'critical'),
