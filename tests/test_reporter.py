@@ -1,5 +1,5 @@
 import pytest
-from src.reporter import IssueReporter
+from pipeclear.reporter import IssueReporter
 
 
 def test_format_resource_issues():

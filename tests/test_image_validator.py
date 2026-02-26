@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from src.validators.image import ImageValidator
+from pipeclear.validators.image import ImageValidator
 
 
 def test_parse_image_reference_with_tag():

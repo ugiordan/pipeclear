@@ -3,12 +3,12 @@ import pytest
 from pathlib import Path
 import json
 
-from src.analyzer import NotebookAnalyzer
-from src.validators.resource import ResourceEstimator
-from src.validators.dependency import DependencyValidator
-from src.validators.security import SecurityScanner
-from src.reporter import IssueReporter
-from src.generator import PipelineGenerator
+from pipeclear.analyzer import NotebookAnalyzer
+from pipeclear.validators.resource import ResourceEstimator
+from pipeclear.validators.dependency import DependencyValidator
+from pipeclear.validators.security import SecurityScanner
+from pipeclear.reporter import IssueReporter
+from pipeclear.generator import PipelineGenerator
 
 
 def test_end_to_end_simple_notebook():
@@ -182,7 +182,7 @@ def test_fix_suggestions_present():
 
 def test_image_validator_integrated():
     """Test that image validation is integrated into the full report."""
-    from src.reporter import IssueReporter
+    from pipeclear.reporter import IssueReporter
     reporter = IssueReporter()
 
     all_reports = {
@@ -202,7 +202,7 @@ def test_image_validator_integrated():
 
 def test_json_output_format():
     """Test that report can be serialized to JSON."""
-    from src.reporter import IssueReporter
+    from pipeclear.reporter import IssueReporter
     reporter = IssueReporter()
 
     all_reports = {

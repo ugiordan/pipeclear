@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
-from src.generator import PipelineGenerator
-from src.analyzer import NotebookAnalyzer
+from pipeclear.generator import PipelineGenerator
+from pipeclear.analyzer import NotebookAnalyzer
 
 
 def test_generate_component_from_cells():

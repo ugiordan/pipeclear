@@ -4,13 +4,13 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from src.analyzer import NotebookAnalyzer
-from src.validators.resource import ResourceEstimator
-from src.validators.dependency import DependencyValidator
-from src.validators.security import SecurityScanner
-from src.validators.image import ImageValidator
-from src.reporter import IssueReporter
-from src.generator import PipelineGenerator
+from pipeclear.analyzer import NotebookAnalyzer
+from pipeclear.validators.resource import ResourceEstimator
+from pipeclear.validators.dependency import DependencyValidator
+from pipeclear.validators.security import SecurityScanner
+from pipeclear.validators.image import ImageValidator
+from pipeclear.reporter import IssueReporter
+from pipeclear.generator import PipelineGenerator
 
 
 app = typer.Typer(help="RHOAI Pipeline Preflight - Notebook-to-Pipeline Converter")

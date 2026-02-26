@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from src.validators.resource import ResourceEstimator
+from pipeclear.validators.resource import ResourceEstimator
 
 
 def test_detect_model_loading():
@@ -29,7 +29,7 @@ def test_full_notebook_resource_estimation():
     """Test full resource estimation from notebook."""
     notebook_path = Path("tests/fixtures/llm_notebook.ipynb")
 
-    from src.analyzer import NotebookAnalyzer
+    from pipeclear.analyzer import NotebookAnalyzer
     analyzer = NotebookAnalyzer(notebook_path)
 
     estimator = ResourceEstimator()
@@ -39,7 +39,7 @@ def test_full_notebook_resource_estimation():
     assert report['estimated_vram_gb'] > 0
 
 
-from src.validators.dependency import DependencyValidator
+from pipeclear.validators.dependency import DependencyValidator
 
 
 def test_extract_package_imports():
@@ -75,7 +75,7 @@ def test_validate_dependencies():
     """Test full dependency validation."""
     notebook_path = Path("tests/fixtures/simple_notebook.ipynb")
 
-    from src.analyzer import NotebookAnalyzer
+    from pipeclear.analyzer import NotebookAnalyzer
     analyzer = NotebookAnalyzer(notebook_path)
 
     validator = DependencyValidator()
@@ -85,7 +85,7 @@ def test_validate_dependencies():
     assert 'numpy' in report['available']
 
 
-from src.validators.security import SecurityScanner
+from pipeclear.validators.security import SecurityScanner
 
 
 def test_detect_aws_credentials():
@@ -118,7 +118,7 @@ def test_full_security_scan():
     """Test full security scan of notebook."""
     notebook_path = Path("tests/fixtures/secrets_notebook.ipynb")
 
-    from src.analyzer import NotebookAnalyzer
+    from pipeclear.analyzer import NotebookAnalyzer
     analyzer = NotebookAnalyzer(notebook_path)
 
     scanner = SecurityScanner()

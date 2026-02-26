@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from src.analyzer import NotebookAnalyzer
+from pipeclear.analyzer import NotebookAnalyzer
 
 
 def test_load_notebook():
@@ -54,7 +54,7 @@ def test_identify_defined_variables():
     """Test identifying variables defined in a code cell."""
     code = "df = pd.read_csv('data.csv')\nx = 5"
 
-    from src.analyzer import extract_defined_vars
+    from pipeclear.analyzer import extract_defined_vars
 
     defined = extract_defined_vars(code)
 
