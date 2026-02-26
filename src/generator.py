@@ -1,6 +1,15 @@
 """KFP pipeline generation module."""
+import re
 from typing import List, Optional
 from textwrap import dedent, indent
+
+
+def sanitize_name(name: str) -> str:
+    """Make a string a valid Python identifier."""
+    name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    if name and name[0].isdigit():
+        name = 'pipeline_' + name
+    return name
 
 
 class PipelineGenerator:
@@ -33,11 +42,12 @@ class PipelineGenerator:
         indented_code = indent(combined_code, "    ")
 
         # Build component
+        safe_name = sanitize_name(name)
         component = f'''@dsl.component(
     base_image="{base_image}",
     packages_to_install={packages}
 )
-def {name}():
+def {safe_name}():
     """Auto-generated component from notebook cells."""
 {indented_code}
 '''
@@ -73,11 +83,12 @@ def {name}():
         )
 
         # Generate pipeline definition
+        safe_pipeline_name = sanitize_name(pipeline_name)
         pipeline_def = f'''@dsl.pipeline(
     name="{pipeline_name}",
     description="Auto-generated from notebook"
 )
-def {pipeline_name}():
+def {safe_pipeline_name}():
     """Pipeline generated from Jupyter notebook."""
     task = notebook_component()
 '''
@@ -93,7 +104,7 @@ from kfp.dsl import Input, Output, Dataset, Model
 if __name__ == '__main__':
     from kfp import compiler
     compiler.Compiler().compile(
-        pipeline_func={pipeline_name},
+        pipeline_func={safe_pipeline_name},
         package_path='{pipeline_name}.yaml'
     )
 '''
