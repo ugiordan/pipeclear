@@ -44,3 +44,42 @@ def test_compiler_blocks_on_critical_issues(tmp_path):
     }):
         with pytest.raises(SystemExit):
             compiler.compile(pipeline_func=test_pipe, package_path=str(output))
+
+
+def test_compiler_warns_on_many_tasks():
+    """Compiler should warn when pipeline has many executors."""
+    compiler = PipeClearCompiler(fail_on_critical=False)
+    # Create spec with 60 executors
+    executors = {f'exec-{i}': {'container': {'image': f'registry.redhat.io/img:{i}'}} for i in range(60)}
+    spec = {'deploymentSpec': {'executors': executors}, 'root': {'dag': {'tasks': {}}}}
+    result = compiler.validate_pipeline_spec(spec)
+    assert len(result['warnings']) > 0
+    assert any('tasks' in w['message'].lower() for w in result['warnings'])
+
+
+def test_compiler_blocks_excessive_tasks():
+    """Compiler should block when pipeline has too many executors."""
+    compiler = PipeClearCompiler(fail_on_critical=True)
+    executors = {f'exec-{i}': {'container': {'image': f'registry.redhat.io/img:{i}'}} for i in range(110)}
+    spec = {'deploymentSpec': {'executors': executors}, 'root': {'dag': {'tasks': {}}}}
+    result = compiler.validate_pipeline_spec(spec)
+    assert len(result['critical']) > 0
+    assert any('tasks' in c['message'].lower() or 'task' in c['message'].lower() for c in result['critical'])
+
+
+def test_compiler_validates_allowed_registries():
+    """Compiler should block images from non-allowed registries."""
+    compiler = PipeClearCompiler(
+        fail_on_critical=True,
+        allowed_registries=['registry.redhat.io', 'quay.io']
+    )
+    spec = {
+        'deploymentSpec': {
+            'executors': {
+                'exec-1': {'container': {'image': 'docker.io/library/python:3.11'}},
+            },
+        },
+    }
+    result = compiler.validate_pipeline_spec(spec)
+    assert len(result['critical']) > 0
+    assert any('allowed registry' in c['message'].lower() for c in result['critical'])

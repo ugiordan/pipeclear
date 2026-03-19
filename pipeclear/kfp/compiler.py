@@ -46,6 +46,30 @@ class PipeClearCompiler:
                         'severity': 'critical',
                     })
 
+        # Task count validation based on executors
+        executor_count = len(executors)
+        if executor_count > 100:
+            critical.append({
+                'message': f'Pipeline has {executor_count} tasks, exceeding maximum of 100',
+                'severity': 'critical',
+            })
+        elif executor_count > 50:
+            warnings.append({
+                'message': f'Pipeline has {executor_count} tasks - consider splitting into smaller pipelines',
+                'severity': 'warning',
+            })
+
+        # Root DAG task count validation
+        root = spec.get('root', {})
+        dag = root.get('dag', {})
+        tasks = dag.get('tasks', {})
+        task_count = len(tasks)
+        if task_count > 100:
+            critical.append({
+                'message': f'Pipeline DAG has {task_count} tasks, exceeding maximum of 100',
+                'severity': 'critical',
+            })
+
         return {'critical': critical, 'warnings': warnings}
 
     def compile(self, pipeline_func, package_path, **kwargs):
