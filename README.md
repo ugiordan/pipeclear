@@ -1,132 +1,102 @@
-# RHOAI Pipeline Preflight
+# PipeClear
 
-**Stop wasting hours on pipeline failures. Know what will break BEFORE you run it.**
+**Clear your notebooks for takeoff.** Pre-flight validation for Jupyter notebooks on Red Hat OpenShift AI.
 
-RHOAI Pipeline Preflight automatically converts Jupyter notebooks to Kubeflow pipelines while detecting resource issues, dependency problems, and security concerns before deployment.
+PipeClear catches pipeline failures in seconds — not minutes. It validates notebooks before deployment, scanning for security risks, dependency issues, resource mismatches, and inaccessible container images.
 
 ## The Problem
 
-Data scientists spend hours waiting for pipeline failures:
-- **Resource errors**: "Out of memory" after 2 hours of training
-- **Dependency hell**: Missing packages discovered at runtime
-- **Security risks**: Hardcoded credentials in production pipelines
-- **Portability issues**: Absolute paths that don't exist in containers
+Data scientists write ML code in Jupyter notebooks, then deploy them as pipelines on RHOAI. But the pipeline environment is different — things break silently:
 
-## The Solution
+- **Security risks**: Hardcoded AWS keys baked into pipeline containers
+- **Missing dependencies**: Packages available locally but not in the pipeline image
+- **Invalid images**: Base container image doesn't exist or isn't pullable
+- **Resource mismatches**: Notebook needs a GPU but pipeline isn't configured for one
 
-Pre-flight validation catches issues early:
+Each failure wastes 10-30 minutes in submit-wait-fail cycles.
 
-```bash
-$ python -m src.cli analyze my_notebook.ipynb
-
-Pre-Flight Analysis Summary
-┏━━━━━━━━━━━━━━━━┳━━━━━━━┓
-┃ Severity       ┃ Count ┃
-┡━━━━━━━━━━━━━━━━╇━━━━━━━┩
-│ 🚨 Critical    │     2 │
-│ ⚠️  Warning    │     1 │
-└────────────────┴───────┘
-
-🚨 [RESOURCE] Estimated VRAM requirement (140GB) exceeds available GPU (80GB)
-🚨 [SECURITY] Line 5: Hardcoded aws_access_key detected
-⚠️  [PORTABILITY] Line 12: Hardcoded path '/Users/data.csv'
-```
-
-## Features
-
-### 🔍 Pre-Flight Validators
-
-**Resource Estimator**
-- Detects LLM model loading patterns
-- Estimates GPU memory requirements
-- Warns about cluster capacity mismatches
-
-**Dependency Validator**
-- Extracts all package imports
-- Checks PyPI availability
-- Identifies custom/internal packages
-
-**Security Scanner**
-- Detects AWS keys, API tokens, secrets
-- Finds hardcoded absolute paths
-- Flags portability issues
-
-### 🚀 Zero-Annotation Conversion
-
-Unlike Kale (requires `#pipeline` comments) or Elyra (manual drag-and-drop), we analyze notebooks automatically:
-
-```python
-# Your notebook cells
-import pandas as pd
-from transformers import AutoModel
-
-model = AutoModel.from_pretrained('bert-base')
-df = pd.read_csv('data.csv')
-```
-
-Becomes a production KFP pipeline - no changes needed!
-
-### 📊 Smart Reporting
-
-Beautiful terminal output with actionable insights:
-- Critical issues block deployment
-- Warnings suggest improvements
-- Exit codes for CI/CD integration
-
-## Installation
+## Quick Start
 
 ```bash
-git clone <repo>
-cd rhoai-pipeline-preflight
 pip install -e ".[dev]"
 ```
 
-## Usage
-
-### Basic Analysis
+### CLI
 
 ```bash
-python -m src.cli analyze notebook.ipynb
+# Analyze a notebook
+pipeclear analyze notebook.ipynb
+
+# Generate a KFP pipeline
+pipeclear analyze notebook.ipynb --output pipeline.py
+
+# JSON output for CI/CD
+pipeclear analyze notebook.ipynb --format json
+
+# Custom base image
+pipeclear analyze notebook.ipynb --base-image registry.redhat.io/ubi9/python-311:latest
 ```
 
-### Generate Pipeline
-
-```bash
-python -m src.cli analyze notebook.ipynb --output pipeline.py
-```
-
-The generated pipeline is ready for deployment:
+### Python SDK
 
 ```python
-from kfp import dsl
+from pipeclear import analyze, generate
 
-@dsl.component(
-    base_image="quay.io/modh/runtime-images:ubi9-python-3.11",
-    packages_to_install=['pandas', 'transformers']
+# Pre-flight validation
+report = analyze("notebook.ipynb")
+if report['summary']['critical'] > 0:
+    print("Issues found!")
+
+# Generate pipeline
+code = generate("notebook.ipynb", output="pipeline.py")
+```
+
+### KFP Compiler Plugin
+
+```python
+from pipeclear.kfp import PipeClearCompiler, validate
+
+# Option A: Compiler wrapper — validates at compile time
+compiler = PipeClearCompiler(
+    fail_on_critical=True,
+    allowed_registries=['registry.redhat.io', 'registry.access.redhat.com']
 )
-def notebook_component():
-    # Your notebook code here
-    ...
+compiler.compile(pipeline_func=my_pipeline, package_path='pipeline.yaml')
 
-@dsl.pipeline(name="my_pipeline")
+# Option B: Decorator — marks pipelines for validation
+@validate(fail_on_critical=True)
+@dsl.pipeline(name="my-pipeline")
 def my_pipeline():
-    task = notebook_component()
+    train_step()
 ```
 
-## Demo Notebooks
+### KFP Reusable Component
 
-Try the examples:
+```python
+from pipeclear.kfp import preflight_check
 
-```bash
-# Clean notebook - passes all checks
-python -m src.cli analyze examples/demo_notebooks/1_simple_success.ipynb
-
-# Large model - resource warnings
-python -m src.cli analyze examples/demo_notebooks/2_resource_problem.ipynb
-
-# Multiple issues - security + resource + dependency
-python -m src.cli analyze examples/demo_notebooks/3_kitchen_sink.ipynb
+@dsl.pipeline(name="validated-pipeline")
+def my_pipeline():
+    check = preflight_check(notebook_path="notebook.ipynb")
+    train = train_component().after(check)
 ```
+
+## Validators
+
+| Validator | Checks | Severity |
+|-----------|--------|----------|
+| **Security Scanner** | AWS keys, API tokens, hardcoded secrets | Critical |
+| **Image Validator** | Base image accessibility, registry auth | Critical |
+| **Dependency Validator** | PyPI availability, stdlib detection | Warning |
+| **Resource Estimator** | GPU/VRAM requirements, model sizes | Warning |
+
+## Real-World Validation
+
+Tested against 7 real notebooks from Red Hat AI Services repos:
+
+- **fraud-detection** (rh-aiservices-bu) — caught hardcoded AWS secret key
+- **insurance-claim-processing** — clean
+- **llm-on-openshift** (LangChain, RAG) — clean
 
 ## Architecture
 
@@ -134,71 +104,32 @@ python -m src.cli analyze examples/demo_notebooks/3_kitchen_sink.ipynb
 Notebook → Analyzer → Validators → Reporter → Generator
               ↓           ↓          ↓           ↓
            AST Parse   Resource   Issues    KFP Pipeline
-                       Deps
+                       Deps       (JSON)
                        Security
+                       Image
 ```
 
-**Components:**
-- `analyzer.py`: Notebook parsing, import extraction, dependency graphs
-- `validators/`: Resource, dependency, and security validators
-- `reporter.py`: Issue formatting and summary generation
-- `generator.py`: KFP pipeline code generation
-- `cli.py`: User-friendly command-line interface
+**Entry points:** CLI (`pipeclear analyze`), SDK (`from pipeclear import analyze`), KFP component, KFP compiler plugin
 
 ## Development
 
-### Run Tests
-
 ```bash
+# Run tests
 pytest tests/ -v
+
+# Run with coverage
+pytest --cov=pipeclear tests/
 ```
 
-### Test Coverage
+## RHOAI Integration
 
-```bash
-pytest --cov=src tests/
-```
+PipeClear integrates into RHOAI at two layers:
 
-## Hackathon Scoring
+1. **Compile-time** — KFP compiler plugin validates before pipeline submission
+2. **Admission-time** — Go webhook in ODH operator validates PipelineVersion CRs
 
-**Time Savings (40%)**
-- Catches failures in seconds vs hours
-- No more waiting for pipelines to crash
-- Automated conversion saves manual work
-
-**Customer Value (30%)**
-- Data scientists ship faster
-- Less debugging, more innovation
-- Production-ready from day 1
-
-**Innovation (15%)**
-- First tool with pre-flight validation
-- Zero-annotation conversion
-- Smart resource estimation
-
-**Technical Implementation (10%)**
-- TDD from start (18 tests, all passing)
-- Clean architecture
-- Production-ready code
-
-**Presentation (5%)**
-- Live demo with real notebooks
-- Clear problem → solution narrative
-- Measurable impact
-
-## Roadmap
-
-**Post-Hackathon:**
-- [ ] Cluster integration via OpenShift MCP
-- [ ] Multi-component pipeline splitting
-- [ ] Custom resource profiles
-- [ ] CI/CD integration
-- [ ] VS Code extension
+See `docs/plans/2026-03-19-pipeclear-rhoai-integration-design.md` for the full architecture.
 
 ## License
 
 MIT
-
-## Contributors
-
-Built for Red Hat AI Hackathon 2026 by Ugo Giordano
