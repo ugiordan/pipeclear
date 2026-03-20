@@ -99,6 +99,28 @@ def test_detect_aws_credentials():
     assert secrets[0]['type'] == 'aws_access_key'
 
 
+def test_aws_secret_key_no_false_positive():
+    """A plain 40-char alphanumeric string should NOT be flagged as aws_secret_key."""
+    code = "some_hash = 'abcdefghijklmnopqrstuvwxyz01234567890123'"
+
+    scanner = SecurityScanner()
+    secrets = scanner.detect_secrets(code)
+
+    aws_secret_hits = [s for s in secrets if s['type'] == 'aws_secret_key']
+    assert len(aws_secret_hits) == 0
+
+
+def test_aws_secret_key_with_context():
+    """An actual aws_secret_access_key assignment SHOULD be flagged."""
+    code = "aws_secret_access_key = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\""
+
+    scanner = SecurityScanner()
+    secrets = scanner.detect_secrets(code)
+
+    aws_secret_hits = [s for s in secrets if s['type'] == 'aws_secret_key']
+    assert len(aws_secret_hits) == 1
+
+
 def test_detect_hardcoded_paths():
     """Test detecting hardcoded absolute paths."""
     code = """

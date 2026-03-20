@@ -1,6 +1,6 @@
 [project]
 name = "pipeclear"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Pre-flight validation and pipeline generation for Jupyter notebooks on RHOAI"
 authors = [{name = "Ugo Giordano"}]
 requires-python = ">=3.11"
@@ -26,6 +26,9 @@ build-backend = "setuptools.build_meta"
 
 [project.scripts]
 pipeclear = "pipeclear.cli:app"
+
+[tool.setuptools.dynamic]
+version = {attr = "pipeclear.__version__"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

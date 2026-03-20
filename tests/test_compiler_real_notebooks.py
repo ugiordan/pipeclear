@@ -37,13 +37,19 @@ def test_generate_from_clean_notebook(notebooks, tmp_path):
         assert 'dsl.component' in code
 
 
-def test_analyze_catches_real_security_issue(notebooks):
-    """The distributed training notebook should flag the hardcoded AWS key."""
+def test_analyze_distributed_notebook_no_false_positive(notebooks):
+    """The distributed training notebook uses env vars, not hardcoded secrets.
+
+    It should NOT trigger false-positive aws_secret_key detections from
+    sha256 hashes or other long alphanumeric strings.
+    """
     distributed = [nb for nb in notebooks if 'distributed' in nb.name]
     if not distributed:
         pytest.skip("Distributed training notebook not found")
 
     report = analyze(str(distributed[0]))
-    assert report['summary']['critical'] > 0
-    assert any('aws' in str(issue).lower() or 'secret' in str(issue).lower()
-               for issue in report.get('issues', []))
+    secret_issues = [
+        issue for issue in report.get('issues', [])
+        if 'aws_secret' in str(issue).lower()
+    ]
+    assert len(secret_issues) == 0, f"False-positive secret detections: {secret_issues}"

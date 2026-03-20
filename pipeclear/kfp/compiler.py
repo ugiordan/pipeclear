@@ -74,6 +74,14 @@ class PipeClearCompiler:
 
     def compile(self, pipeline_func, package_path, **kwargs):
         """Compile pipeline with PipeClear pre-flight validation."""
+        # Apply decorator config if present
+        if hasattr(pipeline_func, '_pipeclear_config'):
+            config = pipeline_func._pipeclear_config
+            if config.get('fail_on_critical') is not None:
+                self.fail_on_critical = config['fail_on_critical']
+            if config.get('allowed_registries') is not None:
+                self.allowed_registries = config['allowed_registries']
+
         self._compiler.compile(
             pipeline_func=pipeline_func,
             package_path=package_path,

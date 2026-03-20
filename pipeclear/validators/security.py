@@ -9,7 +9,7 @@ class SecurityScanner:
     # Regex patterns for common secrets
     PATTERNS = {
         'aws_access_key': r'AKIA[0-9A-Z]{16}',
-        'aws_secret_key': r'[A-Za-z0-9/+=]{40}',
+        'aws_secret_key': r'(?i)(?:aws_secret_access_key|aws_secret_key|secret_key)\s*[=:]\s*["\']?([A-Za-z0-9/+=]{40})["\']?',
         'github_token': r'ghp_[a-zA-Z0-9]{36}',
         'openai_key': r'sk-[a-zA-Z0-9]{32,}',
         'huggingface_token': r'hf_[a-zA-Z0-9]{32,}',

@@ -1,5 +1,4 @@
 """PipeClear decorator for KFP pipeline functions."""
-import functools
 
 
 def validate(fail_on_critical=True, allowed_registries=None):
@@ -9,14 +8,10 @@ def validate(fail_on_critical=True, allowed_registries=None):
     Can also be used standalone to mark pipelines for validation.
     """
     def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-
-        wrapper._pipeclear_validated = True
-        wrapper._pipeclear_config = {
+        func._pipeclear_validated = True
+        func._pipeclear_config = {
             'fail_on_critical': fail_on_critical,
             'allowed_registries': allowed_registries,
         }
-        return wrapper
+        return func
     return decorator
