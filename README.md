@@ -199,7 +199,7 @@ Zero new pods — reuses the existing DSPO-managed API server binary and certifi
 
 ## Integration with OpenDataHub / Data Science Pipelines
 
-The server-side validation (Layer 2) is implemented in a [fork of data-science-pipelines](https://github.com/ugiordan/data-science-pipelines), adding two files to the existing webhook package:
+The server-side validation (Layer 2) is implemented in a [fork of data-science-pipelines](https://github.com/ugiordan/data-science-pipelines/tree/feat/pipeclear-validation) (`feat/pipeclear-validation` branch), adding two files to the existing webhook package:
 
 ```
 backend/src/apiserver/webhook/
