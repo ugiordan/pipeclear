@@ -197,6 +197,27 @@ flowchart TB
 
 Zero new pods — reuses the existing DSPO-managed API server binary and certificates.
 
+## Integration with OpenDataHub / Data Science Pipelines
+
+The server-side validation (Layer 2) is implemented as a patch to the [opendatahub-io/data-science-pipelines](https://github.com/opendatahub-io/data-science-pipelines) codebase. Two files are added to the existing webhook package:
+
+```
+backend/src/apiserver/webhook/
+├── pipelineversion_webhook.go      # Existing — validates PipelineVersion CRs
+├── pipelineversion_webhook_test.go  # Existing
+├── pipeclear.go                     # NEW — validation rules engine
+└── pipeclear_test.go                # NEW — 31 test functions
+```
+
+**How it works:**
+
+1. The DSP API Server already runs a `ValidatingWebhookConfiguration` for `PipelineVersion` custom resources — PipeClear hooks into this existing path
+2. When a pipeline is submitted, the webhook deserializes the KFP IR (protobuf), extracts the `DeploymentSpec`, and iterates over each executor's container spec
+3. `SafeValidatePipelineSpec` wraps validation with panic recovery so a bug in validation never crashes the API server
+4. Configuration flows from the `DataSciencePipelinesApplication` (DSPA) CR through the DSPO operator — giving platform admins per-namespace control
+
+No new Deployments, Services, or TLS certificates. The validation runs in-process with sub-millisecond overhead.
+
 ## Test Coverage
 
 - **Server-Side Validation (Go):** 31 test functions, all passing
@@ -213,3 +234,7 @@ pytest --cov=pipeclear tests/
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
+
+---
+
+Built with the assistance of [Claude](https://claude.ai) (Anthropic).
