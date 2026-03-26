@@ -2,6 +2,7 @@
 name = "pipeclear"
 dynamic = ["version"]
 description = "Pre-flight validation and pipeline generation for Jupyter notebooks on RHOAI"
+license = {text = "Apache-2.0"}
 authors = [{name = "Ugo Giordano"}]
 requires-python = ">=3.11"
 dependencies = [

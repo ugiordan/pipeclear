@@ -1,0 +1,3 @@
+# Test fixtures: fake credential values used to test PipeClear's credential detection rules.
+# These are not real secrets — they are intentionally hardcoded test data.
+tests/test_kfp_compiler_plugin.py

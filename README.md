@@ -1,19 +1,141 @@
 # PipeClear
 
-**Clear your notebooks for takeoff.** Pre-flight validation for Jupyter notebooks on Red Hat OpenShift AI.
+**Pipeline pre-flight validation for Red Hat OpenShift AI.**
 
-PipeClear catches pipeline failures in seconds — not minutes. It validates notebooks before deployment, scanning for security risks, dependency issues, resource mismatches, and inaccessible container images.
+PipeClear catches pipeline issues — unauthorized registries, mutable tags, hardcoded credentials, policy violations — **before** they run. Two layers of defense: compile-time in the notebook, and admission-time on the cluster.
 
-## The Problem
+## Why
 
-Data scientists write ML code in Jupyter notebooks, then deploy them as pipelines on RHOAI. But the pipeline environment is different — things break silently:
+Data scientists build ML pipelines using [Kubeflow Pipelines (KFP)](https://www.kubeflow.org/docs/components/pipelines/), the pipeline orchestration framework that powers Red Hat OpenShift AI (RHOAI). They define pipelines in Jupyter notebooks using the KFP SDK, compile them to YAML (the KFP Intermediate Representation), and submit them to the Data Science Pipelines (DSP) API Server for execution.
 
-- **Security risks**: Hardcoded AWS keys baked into pipeline containers
-- **Missing dependencies**: Packages available locally but not in the pipeline image
-- **Invalid images**: Base container image doesn't exist or isn't pullable
-- **Resource mismatches**: Notebook needs a GPU but pipeline isn't configured for one
+When something goes wrong — a `:latest` tag, a leaked API key, an unauthorized registry — the failure happens **after** the pipeline is already running. Each failure wastes 10–30 minutes in submit-wait-fail cycles.
 
-Each failure wastes 10-30 minutes in submit-wait-fail cycles.
+PipeClear shifts validation left:
+
+```mermaid
+flowchart LR
+    A[KFP Pipeline\nDefinition] --> B[PipeClearCompiler\npip install pipeclear]
+    B -->|pipeline.yaml| C[DSP API Server\nValidatePipelineSpec]
+    C -->|Approved| D[Pipeline Runs]
+
+    B -.->|Denied| E[BLOCKED\nat compile time]
+    C -.->|Denied| F[BLOCKED\nat submission time]
+
+    style A fill:#1565C0,stroke:#0D47A1,color:#fff
+    style B fill:#FF6D00,stroke:#E65100,color:#fff
+    style C fill:#CC0000,stroke:#990000,color:#fff
+    style D fill:#2E7D32,stroke:#1B5E20,color:#fff
+    style E fill:#D32F2F,stroke:#B71C1C,color:#fff
+    style F fill:#D32F2F,stroke:#B71C1C,color:#fff
+```
+
+## Two-Layer Architecture
+
+### Layer 1: Python SDK (`pip install pipeclear`)
+
+Wraps the KFP compiler with pre-flight validation. Catches issues at compile time in the notebook — before pipeline YAML is created.
+
+```python
+from pipeclear.kfp import PipeClearCompiler
+
+compiler = PipeClearCompiler(
+    allowed_registries=["registry.redhat.io", "quay.io/myorg"],
+    block_mutable_tags=True,
+    block_inline_credentials=True,
+)
+compiler.compile(my_pipeline, "pipeline.yaml")
+# Validates images, tags, registries, credentials at compile time
+```
+
+### Layer 2: Server-Side Validation (`ValidatePipelineSpec`)
+
+Runs inside the existing DSP API Server binary — same process, same lifecycle, zero new infrastructure. Type-safe protobuf access with panic recovery.
+
+```go
+result, err := webhook.SafeValidatePipelineSpec(tmpl, config)
+if len(result.Denials) > 0 {
+    // Pipeline blocked at submission time
+}
+```
+
+## Validation Rules
+
+```mermaid
+flowchart LR
+    START[Pipeline\nSubmitted] --> MODE{Enforce\nMode?}
+
+    MODE -->|off| SKIP[Skip] --> APPROVE
+    MODE -->|enforce / audit| RULES
+
+    subgraph RULES [Validation Rules Engine]
+        direction TB
+        R1[Mutable Tags]
+        R2[Registry Allowlist]
+        R3[Credential Detection]
+        R4[Pipeline Hygiene]
+    end
+
+    RULES --> RESULT{Denials?}
+
+    RESULT -->|No| APPROVE[APPROVED]
+    RESULT -->|Yes + enforce| DENY[DENIED]
+    RESULT -->|Yes + audit| AUDIT[APPROVED\nwith warnings]
+
+    style START fill:#1565C0,stroke:#0D47A1,color:#fff
+    style MODE fill:#FF6D00,stroke:#E65100,color:#fff
+    style RESULT fill:#FF6D00,stroke:#E65100,color:#fff
+    style SKIP fill:#757575,stroke:#424242,color:#fff
+    style R1 fill:#1565C0,stroke:#0D47A1,color:#fff
+    style R2 fill:#1565C0,stroke:#0D47A1,color:#fff
+    style R3 fill:#CC0000,stroke:#990000,color:#fff
+    style R4 fill:#1565C0,stroke:#0D47A1,color:#fff
+    style APPROVE fill:#2E7D32,stroke:#1B5E20,color:#fff
+    style DENY fill:#D32F2F,stroke:#B71C1C,color:#fff
+    style AUDIT fill:#FF6D00,stroke:#E65100,color:#fff
+```
+
+| Rule | What it catches | Severity |
+|------|----------------|----------|
+| **Mutable Tags** | `:latest` or missing tags on container images | Warning |
+| **Registry Allowlist** | Images from unauthorized registries | Denial |
+| **Credential Detection** | Hardcoded API keys, tokens, PEM keys in env vars or args | Denial |
+| **Denied Env Vars** | Env var names matching secret patterns (`_PASSWORD`, `_TOKEN`, etc.) | Denial |
+| **Max Tasks** | Pipelines exceeding task count limit (default: 100) | Denial |
+| **Digest Pinning** | Images not pinned by `@sha256:` digest | Warning |
+| **Semver Tags** | Non-semver image tags | Warning |
+| **Resource Limits** | Missing CPU/memory limits on executors | Warning |
+| **Duplicate Tasks** | Identical executor configurations | Warning |
+
+## Enforce Modes
+
+Three operational modes for gradual rollout:
+
+| Mode | Behavior | Use case |
+|------|----------|----------|
+| **enforce** (default) | Denials block pipeline submission | Production — policy compliance is mandatory |
+| **audit** | Denials converted to `[AUDIT]` warnings, pipeline proceeds | Rollout — tune policies before enforcing |
+| **off** | All validation skipped | Development or emergency bypass |
+
+## Configuration
+
+All rules are configurable via `PipeClearConfig`:
+
+```python
+compiler = PipeClearCompiler(
+    block_mutable_tags=True,           # Warn on :latest / no tag
+    allowed_registries=["quay.io"],    # Registry allowlist (None = all allowed)
+    max_tasks=100,                     # Max tasks per pipeline (0 = unlimited)
+    block_inline_credentials=True,     # Detect hardcoded credentials
+    denied_env_var_patterns=[          # Env var name patterns to deny
+        "_PASSWORD", "_SECRET", "_TOKEN", "_API_KEY",
+    ],
+    warn_digest_pinning=False,         # Opt-in: warn on missing @sha256:
+    warn_resource_limits=False,        # Opt-in: warn on missing CPU/mem limits
+    warn_semver_tags=False,            # Opt-in: warn on non-semver tags
+    warn_duplicate_tasks=True,         # Warn on duplicate executor configs
+    mode="enforce",                    # enforce | audit | off
+)
+```
 
 ## Quick Start
 
@@ -21,115 +143,73 @@ Each failure wastes 10-30 minutes in submit-wait-fail cycles.
 pip install -e ".[dev]"
 ```
 
-### CLI
-
-```bash
-# Analyze a notebook
-pipeclear analyze notebook.ipynb
-
-# Generate a KFP pipeline
-pipeclear analyze notebook.ipynb --output pipeline.py
-
-# JSON output for CI/CD
-pipeclear analyze notebook.ipynb --format json
-
-# Custom base image
-pipeclear analyze notebook.ipynb --base-image registry.redhat.io/ubi9/python-311:latest
-```
-
-### Python SDK
-
-```python
-from pipeclear import analyze, generate
-
-# Pre-flight validation
-report = analyze("notebook.ipynb")
-if report['summary']['critical'] > 0:
-    print("Issues found!")
-
-# Generate pipeline
-code = generate("notebook.ipynb", output="pipeline.py")
-```
-
 ### KFP Compiler Plugin
 
 ```python
-from pipeclear.kfp import PipeClearCompiler, validate
+from kfp import dsl
+from pipeclear.kfp import PipeClearCompiler
 
-# Option A: Compiler wrapper — validates at compile time
-compiler = PipeClearCompiler(
-    fail_on_critical=True,
-    allowed_registries=['registry.redhat.io', 'registry.access.redhat.com']
-)
-compiler.compile(pipeline_func=my_pipeline, package_path='pipeline.yaml')
-
-# Option B: Decorator — marks pipelines for validation
-@validate(fail_on_critical=True)
-@dsl.pipeline(name="my-pipeline")
+@dsl.pipeline(name="training-pipeline")
 def my_pipeline():
-    train_step()
+    train = dsl.ContainerOp(
+        name="train",
+        image="quay.io/myorg/trainer:v1.2.3",
+    )
+
+compiler = PipeClearCompiler()
+compiler.compile(my_pipeline, "pipeline.yaml")
 ```
 
-### KFP Reusable Component
+### CLI
 
-```python
-from pipeclear.kfp import preflight_check
-
-@dsl.pipeline(name="validated-pipeline")
-def my_pipeline():
-    check = preflight_check(notebook_path="notebook.ipynb")
-    train = train_component().after(check)
+```bash
+pipeclear analyze notebook.ipynb
+pipeclear analyze notebook.ipynb --format json
+pipeclear analyze notebook.ipynb --base-image registry.redhat.io/ubi9/python-311:latest
 ```
 
-## Validators
+## Deployment Model
 
-| Validator | Checks | Severity |
-|-----------|--------|----------|
-| **Security Scanner** | AWS keys, API tokens, hardcoded secrets | Critical |
-| **Image Validator** | Base image accessibility, registry auth | Critical |
-| **Dependency Validator** | PyPI availability, stdlib detection | Warning |
-| **Resource Estimator** | GPU/VRAM requirements, model sizes | Warning |
+```mermaid
+flowchart TB
+    subgraph DSPO [DSPO Operator]
+        CR[DSPA CR\nPipeClearConfig]
+    end
 
-## Real-World Validation
+    subgraph DSP [DSP API Server Pod]
+        API[API Server]
+        WH[ValidatePipelineSpec\nPipeClear webhook]
+    end
 
-Tested against 7 real notebooks from Red Hat AI Services repos:
+    subgraph NB [Jupyter Notebook]
+        SDK[PipeClearCompiler\npip install pipeclear]
+    end
 
-- **fraud-detection** (rh-aiservices-bu) — caught hardcoded AWS secret key
-- **insurance-claim-processing** — clean
-- **llm-on-openshift** (LangChain, RAG) — clean
+    CR -->|configures| WH
+    SDK -->|compile-time\nvalidation| API
+    API -->|admission-time\nvalidation| WH
 
-## Architecture
-
+    style CR fill:#FF6D00,stroke:#E65100,color:#fff
+    style API fill:#CC0000,stroke:#990000,color:#fff
+    style WH fill:#CC0000,stroke:#990000,color:#fff
+    style SDK fill:#1565C0,stroke:#0D47A1,color:#fff
 ```
-Notebook → Analyzer → Validators → Reporter → Generator
-              ↓           ↓          ↓           ↓
-           AST Parse   Resource   Issues    KFP Pipeline
-                       Deps       (JSON)
-                       Security
-                       Image
-```
 
-**Entry points:** CLI (`pipeclear analyze`), SDK (`from pipeclear import analyze`), KFP component, KFP compiler plugin
+Zero new pods — reuses the existing DSPO-managed API server binary and certificates.
+
+## Test Coverage
+
+- **Server-Side Validation (Go):** 31 test functions, all passing
+- **Python SDK:** 48 test functions, all passing
+- **4 independent architecture reviews** confirmed stability
 
 ## Development
 
 ```bash
-# Run tests
 pytest tests/ -v
-
-# Run with coverage
 pytest --cov=pipeclear tests/
 ```
 
-## RHOAI Integration
-
-PipeClear integrates into RHOAI at two layers:
-
-1. **Compile-time** — KFP compiler plugin validates before pipeline submission
-2. **Admission-time** — Go webhook in ODH operator validates PipelineVersion CRs
-
-See `docs/plans/2026-03-19-pipeclear-rhoai-integration-design.md` for the full architecture.
-
 ## License
 
-MIT
+Apache License 2.0 — see [LICENSE](LICENSE).

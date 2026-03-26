@@ -1,0 +1,5 @@
+[allowlist]
+  description = "Allow test fixtures with fake credential values"
+  paths = [
+    '''tests/.*'''
+  ]

@@ -1,0 +1,25 @@
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '20px', 'fontFamily': 'Arial'}, 'flowchart': {'nodeSpacing': 40, 'rankSpacing': 60, 'padding': 20}}}%%
+flowchart LR
+    A["<b>KFP Pipeline</b><br/>Definition"]:::notebook
+
+    B["<b>PipeClearCompiler</b><br/><i>pip install pipeclear</i>"]:::python
+
+    C["<b>DSP API Server</b><br/><i>ValidatePipelineSpec</i>"]:::golang
+
+    D["<b>Pipeline</b><br/><b>Runs</b>"]:::approved
+
+    E["<b>BLOCKED</b><br/>at compile time"]:::denied
+    F["<b>BLOCKED</b><br/>at submission time"]:::denied
+
+    A -->|"compile()"| B
+    B -->|"pipeline.yaml"| C
+    C -->|"Approved"| D
+
+    B -.->|"Denied"| E
+    C -.->|"Denied"| F
+
+    classDef notebook fill:#1565C0,stroke:#0D47A1,color:#FFFFFF,font-size:18px,font-weight:bold
+    classDef python fill:#FF6D00,stroke:#E65100,color:#FFFFFF,font-size:18px,font-weight:bold
+    classDef golang fill:#CC0000,stroke:#990000,color:#FFFFFF,font-size:18px,font-weight:bold
+    classDef approved fill:#2E7D32,stroke:#1B5E20,color:#FFFFFF,font-size:18px,font-weight:bold
+    classDef denied fill:#D32F2F,stroke:#B71C1C,color:#FFFFFF,font-size:16px,font-weight:bold

@@ -1,0 +1,30 @@
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '18px', 'fontFamily': 'Arial'}, 'flowchart': {'nodeSpacing': 30, 'rankSpacing': 50, 'padding': 15}}}%%
+flowchart LR
+    START["<b>Pipeline<br/>Submitted</b>"]:::start --> MODE{"<b>Enforce<br/>Mode?</b>"}:::decision
+
+    MODE -->|"off"| SKIP["<b>Skip</b>"]:::skip --> APPROVE
+
+    MODE -->|"enforce / audit"| RULES
+
+    subgraph RULES["<b>Validation Rules Engine</b>"]
+        direction TB
+        R1["<b>Mutable Tags</b>"]:::rule
+        R2["<b>Registry Allowlist</b>"]:::rule
+        R3["<b>Credential Detection</b>"]:::rulecrit
+        R4["<b>Pipeline Hygiene</b>"]:::rule
+    end
+
+    RULES --> RESULT{"<b>Denials?</b>"}:::decision
+
+    RESULT -->|"No"| APPROVE["<b>APPROVED</b>"]:::approved
+    RESULT -->|"Yes + enforce"| DENY["<b>DENIED</b>"]:::denied
+    RESULT -->|"Yes + audit"| AUDIT["<b>APPROVED</b><br/><i>warnings</i>"]:::audit
+
+    classDef start fill:#1565C0,stroke:#0D47A1,color:#FFFFFF,font-size:18px,font-weight:bold
+    classDef decision fill:#FF6D00,stroke:#E65100,color:#FFFFFF,font-size:16px,font-weight:bold
+    classDef skip fill:#757575,stroke:#424242,color:#FFFFFF,font-size:16px
+    classDef rule fill:#1565C0,stroke:#0D47A1,color:#FFFFFF,font-size:16px
+    classDef rulecrit fill:#CC0000,stroke:#990000,color:#FFFFFF,font-size:16px
+    classDef approved fill:#2E7D32,stroke:#1B5E20,color:#FFFFFF,font-size:18px,font-weight:bold
+    classDef denied fill:#D32F2F,stroke:#B71C1C,color:#FFFFFF,font-size:18px,font-weight:bold
+    classDef audit fill:#FF6D00,stroke:#E65100,color:#FFFFFF,font-size:16px,font-weight:bold
