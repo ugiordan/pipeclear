@@ -8,6 +8,36 @@
 
 **Last Updated:** 2026-03-27
 
+<!-- toc -->
+- [Summary](#summary)
+- [Motivation](#motivation)
+  - [Goals](#goals)
+  - [Non-Goals](#non-goals)
+- [Proposal](#proposal)
+  - [Overview](#overview)
+  - [User Stories](#user-stories)
+  - [Notes/Constraints/Caveats](#notesconstraintscaveats)
+  - [Risks and Mitigations](#risks-and-mitigations)
+- [Design Details](#design-details)
+  - [Configuration](#configuration)
+  - [Validation Rules](#validation-rules)
+  - [Credential Detection Patterns](#credential-detection-patterns)
+  - [Validation Result](#validation-result)
+  - [Integration Point](#integration-point)
+  - [Panic Recovery](#panic-recovery)
+- [Test Plan](#test-plan)
+  - [Unit Tests](#unit-tests)
+  - [Integration Tests](#integration-tests)
+  - [E2E Tests](#e2e-tests)
+- [Graduation Criteria](#graduation-criteria)
+- [Frontend Considerations](#frontend-considerations)
+- [KFP Local Considerations](#kfp-local-considerations)
+- [Migration Strategy](#migration-strategy)
+- [Implementation History](#implementation-history)
+- [Drawbacks](#drawbacks)
+- [Alternatives](#alternatives)
+<!-- /toc -->
+
 ## Summary
 
 Add a configurable, server-side validation rules engine to the Kubeflow Pipelines API server that inspects pipeline specs at admission time — before pipelines run. Platform administrators define policies (allowed registries, mutable tag blocking, credential detection, task limits) via a configuration resource, and the existing `PipelineVersion` validating webhook enforces them. Three enforce modes (`enforce`, `audit`, `off`) enable gradual rollout.
@@ -271,11 +301,11 @@ func SafeValidatePipelineSpec(spec interface{}, config Config) (result Validatio
 }
 ```
 
-### Test Plan
+## Test Plan
 
 [x] I/we understand the owners of the involved components may require updates to existing tests to make this code solid enough prior to committing the changes necessary to implement this enhancement.
 
-#### Unit Tests
+### Unit Tests
 
 - **Validation rules:** Each rule has dedicated test functions covering positive matches, negative matches, and edge cases
 - **Configuration parsing:** Tests for default values, partial configs, invalid configs
@@ -285,7 +315,7 @@ func SafeValidatePipelineSpec(spec interface{}, config Config) (result Validatio
 
 A reference implementation with 31 test functions is available at [ugiordan/data-science-pipelines@feat/pipeclear-validation](https://github.com/ugiordan/data-science-pipelines/tree/feat/pipeclear-validation).
 
-#### Integration Tests
+### Integration Tests
 
 - Submit a pipeline with a disallowed registry image in `enforce` mode → verify rejection
 - Submit a pipeline with a disallowed registry image in `audit` mode → verify acceptance with logged warnings
@@ -293,45 +323,45 @@ A reference implementation with 31 test functions is available at [ugiordan/data
 - Change configuration and verify next submission uses new config
 - Submit a valid pipeline → verify it passes through unchanged
 
-#### E2E Tests
+### E2E Tests
 
 - Deploy KFP with PipeClear enabled, submit pipelines via the SDK, and verify enforcement behavior end-to-end
 - Verify that existing pipelines (without policy violations) continue to work with PipeClear enabled
 
-### Graduation Criteria
+## Graduation Criteria
 
-#### Alpha
+### Alpha
 
 - Validation rules engine implemented and tested
 - Configuration via ConfigMap
 - `enforce`, `audit`, `off` modes working
 - Documentation for administrators
 
-#### Beta
+### Beta
 
 - Configuration via CR field (for operator-managed deployments)
 - UI integration: show validation warnings/denials in the pipeline submission response
 - Metrics: Prometheus counters for denials, warnings, and errors per rule
 - At least two production deployments in `audit` mode
 
-#### Stable
+### Stable
 
 - Stable configuration API
 - Comprehensive documentation with examples
 - Performance benchmarks published
 
-### Frontend Considerations
+## Frontend Considerations
 
 - Pipeline submission errors should display the structured validation report (rule name, executor, image, description) rather than a raw error string
 - The UI could optionally show an "audit" badge on pipelines that passed with warnings
 - No frontend changes required for the alpha implementation — validation errors flow through the existing error handling path
 
-### KFP Local Considerations
+## KFP Local Considerations
 
 - `kfp local` runs pipelines locally without the API server, so server-side validation does not apply
 - Users who want local validation can use a complementary SDK-side solution (out of scope for this KEP)
 
-### Migration Strategy
+## Migration Strategy
 
 - **No breaking changes:** Validation is disabled by default when no configuration is provided
 - **Gradual rollout path:** Deploy with `mode: off` → switch to `audit` to observe → switch to `enforce` to block
