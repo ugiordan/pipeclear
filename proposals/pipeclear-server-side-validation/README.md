@@ -1,4 +1,4 @@
-# KEP: Server-Side Pipeline Validation for Kubeflow Pipelines
+# KEP-13151: Server-Side Pipeline Validation for Kubeflow Pipelines
 
 **Authors:** Ugo Giordano (@ugiordan)
 

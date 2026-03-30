@@ -6,6 +6,8 @@ Works with upstream KFP, [OpenDataHub](https://opendatahub.io/), and [Red Hat Op
 
 PipeClear catches pipeline issues (unauthorized registries, mutable tags, hardcoded credentials, policy violations) **before** they run. Two layers of defense: compile-time in the notebook, and admission-time on the cluster.
 
+Available as both a **Python library** (`pip install pipeclear`) and a **Go library** (`go get github.com/ugiordan/pipeclear`).
+
 ## Why
 
 Data scientists build ML pipelines using the [KFP SDK](https://www.kubeflow.org/docs/components/pipelines/), compile them to YAML (the KFP Intermediate Representation), and submit them to the KFP API Server for execution.
@@ -46,15 +48,17 @@ compiler = PipeClearCompiler(
     block_inline_credentials=True,
 )
 compiler.compile(my_pipeline, "pipeline.yaml")
-# Validates images, tags, registries, credentials at compile time
 ```
 
-### Layer 2: Server-Side Validation (`ValidatePipelineSpec`)
+### Layer 2: Go Library (`go get github.com/ugiordan/pipeclear`)
 
-Runs inside the existing KFP API Server binary, same process, same lifecycle, zero new infrastructure. Type-safe protobuf access with panic recovery.
+Standalone validation engine that accepts raw KFP pipeline spec JSON. Used by the KFP API Server webhook for admission-time validation, but importable by any Go project in the KFP ecosystem.
 
 ```go
-result, err := webhook.SafeValidatePipelineSpec(tmpl, config)
+import "github.com/ugiordan/pipeclear/pkg/pipeclear"
+
+config, _ := pipeclear.LoadConfig("pipeclear.yaml")
+result, err := pipeclear.SafeValidate(specJSON, config)
 if len(result.Denials) > 0 {
     // Pipeline blocked at submission time
 }
@@ -118,34 +122,72 @@ Three operational modes for gradual rollout:
 | **audit** | Denials converted to `[AUDIT]` warnings, pipeline proceeds | Rollout: tune policies before enforcing |
 | **off** | All validation skipped | Development or emergency bypass |
 
-## Configuration
+## Shared Configuration
 
-All rules are configurable via `PipeClearConfig`:
+Both Go and Python consume the same YAML config format:
+
+```yaml
+# pipeclear.yaml
+mode: enforce                    # enforce | audit | off
+allowedRegistries:               # empty or omitted = all allowed
+  - registry.redhat.io
+  - quay.io/myorg
+blockMutableTags: true           # warn on :latest or missing tags
+blockInlineCredentials: true     # detect hardcoded secrets
+maxTasks: 100                    # 0 = unlimited
+deniedEnvVarPatterns:            # env var name suffixes to deny
+  - _PASSWORD
+  - _SECRET
+  - _TOKEN
+  - _API_KEY
+warnDigestPinning: false         # opt-in: warn on missing @sha256:
+warnSemverTags: false            # opt-in: warn on non-semver tags
+warnResourceLimits: false        # opt-in: warn on missing CPU/mem limits
+warnDuplicateTasks: true         # warn on identical executor configs
+```
+
+Field names use camelCase (Go convention). Python maps them to snake_case internally.
+
+### Loading config in Python
 
 ```python
+from pipeclear.kfp import PipeClearCompiler
+
+# From YAML file
+compiler = PipeClearCompiler.from_config("pipeclear.yaml")
+
+# With overrides
+compiler = PipeClearCompiler.from_config("pipeclear.yaml", mode="audit")
+
+# Or inline kwargs (existing API, unchanged)
 compiler = PipeClearCompiler(
-    block_mutable_tags=True,           # Warn on :latest / no tag
-    allowed_registries=["quay.io"],    # Registry allowlist (None = all allowed)
-    max_tasks=100,                     # Max tasks per pipeline (0 = unlimited)
-    block_inline_credentials=True,     # Detect hardcoded credentials
-    denied_env_var_patterns=[          # Env var name patterns to deny
-        "_PASSWORD", "_SECRET", "_TOKEN", "_API_KEY",
-    ],
-    warn_digest_pinning=False,         # Opt-in: warn on missing @sha256:
-    warn_resource_limits=False,        # Opt-in: warn on missing CPU/mem limits
-    warn_semver_tags=False,            # Opt-in: warn on non-semver tags
-    warn_duplicate_tasks=True,         # Warn on duplicate executor configs
-    mode="enforce",                    # enforce | audit | off
+    allowed_registries=["quay.io/myorg"],
+    block_mutable_tags=True,
 )
+```
+
+### Loading config in Go
+
+```go
+import "github.com/ugiordan/pipeclear/pkg/pipeclear"
+
+// From YAML file
+config, err := pipeclear.LoadConfig("pipeclear.yaml")
+
+// From raw bytes (e.g. loaded from a ConfigMap)
+config, err := pipeclear.ParseConfig(configMapData)
+
+// Defaults
+config := pipeclear.DefaultConfig()
 ```
 
 ## Quick Start
 
+### Python
+
 ```bash
 pip install -e ".[dev]"
 ```
-
-### KFP Compiler Plugin
 
 ```python
 from kfp import dsl
@@ -162,12 +204,28 @@ compiler = PipeClearCompiler()
 compiler.compile(my_pipeline, "pipeline.yaml")
 ```
 
+### Go
+
+```bash
+go get github.com/ugiordan/pipeclear/pkg/pipeclear
+```
+
+```go
+config := pipeclear.DefaultConfig()
+config.AllowedRegistries = []string{"registry.redhat.io", "quay.io/myorg"}
+
+result, err := pipeclear.Validate(pipelineSpecJSON, config)
+for _, d := range result.Denials {
+    fmt.Println("DENIED:", d)
+}
+```
+
 ### CLI
 
 ```bash
 pipeclear analyze notebook.ipynb
 pipeclear analyze notebook.ipynb --format json
-pipeclear analyze notebook.ipynb --base-image registry.redhat.io/ubi9/python-311:latest
+pipeclear analyze notebook.ipynb --config pipeclear.yaml
 ```
 
 ## Deployment Model
@@ -222,19 +280,23 @@ backend/src/apiserver/webhook/
 
 No new Deployments, Services, or TLS certificates. The validation runs in-process with sub-millisecond overhead.
 
-**KEP:** [kubeflow/pipelines#13151](https://github.com/kubeflow/pipelines/issues/13151) | **PR:** [kubeflow/pipelines#13152](https://github.com/kubeflow/pipelines/pull/13152)
+**KEP:** [kubeflow/pipelines#13151](https://github.com/kubeflow/pipelines/issues/13151) | **PR:** [kubeflow/pipelines#13156](https://github.com/kubeflow/pipelines/pull/13156)
 
 ## Test Coverage
 
+- **Go Library:** 22 test functions, all passing
 - **Server-Side Validation (Go):** 31 test functions, all passing
 - **Python SDK:** 48 test functions, all passing
-- **4 independent architecture reviews** confirmed stability
 
 ## Development
 
 ```bash
+# Python
 pytest tests/ -v
 pytest --cov=pipeclear tests/
+
+# Go
+go test ./pkg/pipeclear/ -v
 ```
 
 ## License
