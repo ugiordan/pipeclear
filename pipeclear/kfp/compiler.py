@@ -198,6 +198,20 @@ class PipeClearCompiler:
         # Validate config at construction time
         _validate_config(self.denied_env_var_patterns, self.mode)
 
+    @classmethod
+    def from_config(cls, config_path: str, **overrides) -> "PipeClearCompiler":
+        """Create a PipeClearCompiler from a YAML config file.
+
+        Args:
+            config_path: Path to a pipeclear.yaml config file.
+            **overrides: Keyword arguments that override config file values.
+        """
+        from pipeclear.config import PipeClearConfig
+        config = PipeClearConfig.from_yaml(config_path)
+        kwargs = config.to_compiler_kwargs()
+        kwargs.update(overrides)
+        return cls(**kwargs)
+
     def validate_pipeline_spec(self, spec: dict, allowed_registries_override=None) -> dict:
         """Validate a compiled pipeline IR spec."""
         # If validation is disabled, return empty result
