@@ -28,8 +28,15 @@ def analyze(
         "--base-image",
         help="Base container image for pipeline components"
     ),
+    config: str = typer.Option(None, "--config", "-c", help="Path to pipeclear.yaml config file"),
 ):
     """Analyze notebook and generate pre-flight report."""
+
+    compiler_kwargs = {}
+    if config:
+        from pipeclear.config import PipeClearConfig
+        pc_config = PipeClearConfig.from_yaml(config)
+        compiler_kwargs = pc_config.to_compiler_kwargs()
 
     # Error handling
     if not notebook_path.exists():
